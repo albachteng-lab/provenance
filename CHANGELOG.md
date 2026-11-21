@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Runner task run tracking
+
+- Migration 000002: `task_runs` table and nullable `prompt_events.task_run_id` FK
+- Storage: `CreateTaskRun`, `CompleteTaskRun`, `CompleteTaskRunWith`, `GetTaskRun`, `ListTaskRuns`
+- CLI: `prov task start` / `prov task complete` write directly to SQLite (no daemon required)
+- Claude Code tool hooks forward `AI_PROVENANCE_TASK_RUN_ID` as `task_run_id`
+- `InitDatabase` sets `PRAGMA busy_timeout=5000`
+
+### Fixed
+
+- `capture-hook` could drop events when the daemon processed the prompt event before
+  its `session_start`; clients now wait for the daemon to finish each message
+
 ### Added - Phase 4 Feature 4 Complete (2026-01-11)
 
 **Git Commit Correlation**

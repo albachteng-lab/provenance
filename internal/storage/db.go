@@ -49,6 +49,15 @@ func InitDatabase(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
+	// Wait up to 5s for write locks held by other processes (e.g. the daemon)
+	// instead of failing immediately with SQLITE_BUSY.
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("failed to close database after busy_timeout error: %v", closeErr)
+		}
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		if closeErr := db.Close(); closeErr != nil {
 			log.Printf("failed to close database after foreign keys error: %v", closeErr)
