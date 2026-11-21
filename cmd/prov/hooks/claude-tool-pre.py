@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import sys
 import subprocess
 
@@ -14,6 +15,10 @@ event = {
     'cwd': hook_input.get('cwd'),
     'permission_mode': hook_input.get('permission_mode'),
 }
+
+task_run_id = os.environ.get('AI_PROVENANCE_TASK_RUN_ID', '')
+if task_run_id:
+    event['task_run_id'] = task_run_id
 
 try:
     subprocess.run(

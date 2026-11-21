@@ -45,6 +45,9 @@ type PromptEvent struct {
 	PromptType     string
 	ToolsInvoked   []string // JSON array in DB
 	FilesMentioned []string // JSON array in DB
+
+	// Runner context: ID of the task_runs row this event belongs to ("" if none)
+	TaskRunID string
 }
 
 // Session represents a group of related prompts
@@ -109,14 +112,16 @@ func StorePromptEvent(db *sql.DB, event *PromptEvent) error {
 			tokens_in, tokens_out, latency_ms,
 			repo_path, git_commit, git_branch, git_dirty, dirty_files,
 			author, ide, active_file, workspace_files,
-			prompt_type, tools_invoked, files_mentioned
+			prompt_type, tools_invoked, files_mentioned,
+			task_run_id
 		) VALUES (
 			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
-			?, ?, ?
+			?, ?, ?,
+			?
 		)
 	`
 
@@ -128,6 +133,7 @@ func StorePromptEvent(db *sql.DB, event *PromptEvent) error {
 		event.RepoPath, event.GitCommit, event.GitBranch, event.GitDirty, string(dirtyFilesJSON),
 		event.Author, event.IDE, event.ActiveFile, string(workspaceFilesJSON),
 		event.PromptType, string(toolsInvokedJSON), string(filesMentionedJSON),
+		nullString(event.TaskRunID),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert prompt event: %w", err)
@@ -145,7 +151,8 @@ func GetPromptEvent(db *sql.DB, id string) (*PromptEvent, error) {
 			tokens_in, tokens_out, latency_ms,
 			repo_path, git_commit, git_branch, git_dirty, dirty_files,
 			author, ide, active_file, workspace_files,
-			prompt_type, tools_invoked, files_mentioned
+			prompt_type, tools_invoked, files_mentioned,
+			task_run_id
 		FROM prompt_events
 		WHERE id = ?
 	`
@@ -153,6 +160,7 @@ func GetPromptEvent(db *sql.DB, id string) (*PromptEvent, error) {
 	var event PromptEvent
 	var timestampUnix int64
 	var dirtyFilesJSON, workspaceFilesJSON, toolsInvokedJSON, filesMentionedJSON string
+	var taskRunID sql.NullString
 
 	err := db.QueryRow(query, id).Scan(
 		&event.ID, &timestampUnix, &event.SessionID,
@@ -161,6 +169,7 @@ func GetPromptEvent(db *sql.DB, id string) (*PromptEvent, error) {
 		&event.RepoPath, &event.GitCommit, &event.GitBranch, &event.GitDirty, &dirtyFilesJSON,
 		&event.Author, &event.IDE, &event.ActiveFile, &workspaceFilesJSON,
 		&event.PromptType, &toolsInvokedJSON, &filesMentionedJSON,
+		&taskRunID,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -170,6 +179,7 @@ func GetPromptEvent(db *sql.DB, id string) (*PromptEvent, error) {
 	}
 
 	event.Timestamp = time.Unix(timestampUnix, 0)
+	event.TaskRunID = taskRunID.String
 
 	if err := json.Unmarshal([]byte(dirtyFilesJSON), &event.DirtyFiles); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal dirty_files: %w", err)
@@ -199,7 +209,8 @@ func ListPromptEvents(db *sql.DB, sessionID string) ([]*PromptEvent, error) {
 			tokens_in, tokens_out, latency_ms,
 			repo_path, git_commit, git_branch, git_dirty, dirty_files,
 			author, ide, active_file, workspace_files,
-			prompt_type, tools_invoked, files_mentioned
+			prompt_type, tools_invoked, files_mentioned,
+			task_run_id
 		FROM prompt_events
 		WHERE session_id = ?
 		ORDER BY timestamp ASC
@@ -216,6 +227,7 @@ func ListPromptEvents(db *sql.DB, sessionID string) ([]*PromptEvent, error) {
 		var event PromptEvent
 		var timestampUnix int64
 		var dirtyFilesJSON, workspaceFilesJSON, toolsInvokedJSON, filesMentionedJSON string
+		var taskRunID sql.NullString
 
 		err := rows.Scan(
 			&event.ID, &timestampUnix, &event.SessionID,
@@ -224,12 +236,14 @@ func ListPromptEvents(db *sql.DB, sessionID string) ([]*PromptEvent, error) {
 			&event.RepoPath, &event.GitCommit, &event.GitBranch, &event.GitDirty, &dirtyFilesJSON,
 			&event.Author, &event.IDE, &event.ActiveFile, &workspaceFilesJSON,
 			&event.PromptType, &toolsInvokedJSON, &filesMentionedJSON,
+			&taskRunID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan prompt event: %w", err)
 		}
 
 		event.Timestamp = time.Unix(timestampUnix, 0)
+		event.TaskRunID = taskRunID.String
 
 		if err := json.Unmarshal([]byte(dirtyFilesJSON), &event.DirtyFiles); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal dirty_files: %w", err)

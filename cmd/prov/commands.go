@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -544,7 +545,19 @@ func sendMessageToDaemon(socketPath string, message interface{}) {
 	defer conn.Close() //nolint:errcheck
 
 	encoder := json.NewEncoder(conn)
-	encoder.Encode(message) //nolint:errcheck
+	if err := encoder.Encode(message); err != nil {
+		return
+	}
+
+	// Signal end of message, then wait for the daemon to close the connection
+	// once it has handled the message. This preserves ordering between
+	// consecutive messages (e.g. session_start must be stored before the
+	// prompt event that references it, or the event fails its FK check).
+	if uc, ok := conn.(*net.UnixConn); ok {
+		uc.CloseWrite() //nolint:errcheck
+	}
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck
+	io.Copy(io.Discard, conn)                             //nolint:errcheck
 }
 
 // generateEventID creates a unique event ID
@@ -678,6 +691,7 @@ func captureHook() error {
 	eventName, _ := hookInput["hook_event_name"].(string)
 	sessionID, _ := hookInput["session_id"].(string)
 	cwd, _ := hookInput["cwd"].(string)
+	taskRunID, _ := hookInput["task_run_id"].(string)
 
 	if cwd == "" {
 		if dir, err := os.Getwd(); err == nil {
@@ -750,6 +764,7 @@ func captureHook() error {
 		GitDirty:   gitDirty,
 		Author:     author,
 		IDE:        "claude-code",
+		TaskRunID:  taskRunID,
 	}
 
 	sendMessageToDaemon(socketPath, event)

@@ -64,6 +64,8 @@ func main() {
 		cmdTag()
 	case "untag":
 		cmdUntag()
+	case "task":
+		cmdTask()
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -106,6 +108,10 @@ func printUsage() {
 	fmt.Println("  tag <prompt-id> --commit <sha>  Manually link prompt to commit")
 	fmt.Println("  tag <prompt-id> --file <path>   Manually link prompt to file")
 	fmt.Println("  untag <prompt-id> <commit>      Remove manual tag")
+	fmt.Println("  task start --task-id <n> --repo <owner/repo> --agent <a> --harness-hash <sha>")
+	fmt.Println("             [--base-commit <sha>] [--retry-count <n>]   Record task run start, print run ID")
+	fmt.Println("  task complete --run-id <uuid> --outcome <outcome> [--final-commit <sha>]")
+	fmt.Println("             [--verify-pass <bool>] [--verify-summary <json>] [--pr-url <url>] [--diff-stored <bool>]")
 	fmt.Println()
 	fmt.Println("Run 'prov <command> --help' for more information")
 }
